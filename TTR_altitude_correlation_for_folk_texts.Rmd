@@ -1,0 +1,572 @@
+---
+title: "TTRw and altitude (folklore texts)" 
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r, echo=FALSE, include=FALSE}
+library("tidyverse")
+library("zipfR")
+library("lingtypology")
+library("ggpubr")
+```
+
+
+
+#Interpolation of Heap's curves with zipfR
+
+```{r}
+languages = c('agx', 'ava', 'kum', 'rut', 'dar', 'tab', 'lak', 'lez', 'nog', 'tkr', 'arch', 'khv')
+```
+
+
+## observed values
+
+Vocabulary growth curve (VGC) reports vocabulary size (number of types, V ) as a function of sample size (number of tokens, N)
+
+```{r}
+for (language in languages) {
+
+  type_count <- read.vgc(paste0("type_counts_texts/", language, "-folk_type_counts.txt"))
+  var_name1 <- paste0("type_count_", language)
+  assign(var_name1, type_count)
+} 
+```
+
+
+```{r}
+plot(type_count_agx,
+     type_count_ava,
+     type_count_kum,
+     type_count_rut,
+     type_count_dar,
+     type_count_tab,
+     type_count_lak,
+     type_count_lez,
+     type_count_nog,
+     type_count_tkr,
+     type_count_arch,
+     type_count_khv,
+     xlab = "number of wordforms", ylab = "number of unique wordforms", main = ""
+     )
+
+```
+
+
+
+## expected values
+
+`vgc.interp` computes the expected vocabulary growth curve
+In addition, we extract the TTR value from the expected curve at the particular corpus size and save it to csv
+
+```{r}
+ttr_at_particular_corpus_size <- data.frame(languages)
+
+for (language in languages) {
+  
+  freq_list <- read.tfl(paste0("frequency_lists_texts/", language, "-folk_freq.txt")) 
+  freq_spectrum <- tfl2spc(freq_list)
+  type_count <- read.vgc(paste0("type_counts_texts/", language, "-folk_type_counts.txt"))
+  
+  interpolated_type_count <- vgc.interp(freq_spectrum, N(type_count))
+  
+
+  
+ #for checking correlations at different corpus sizes
+  ttr_for_one_language <- c()
+  x <- 4000 # the corpus size where we take TTR values
+  n_of_types <- interpolated_type_count$V[interpolated_type_count$N == x]
+  ttr_for_one_language <- n_of_types/x
+  
+  ttr_at_particular_corpus_size$value[ttr_at_particular_corpus_size$lang == language] <- ttr_for_one_language
+
+
+  var_name1 <- paste0("interpolated_type_count_", language)
+  assign(var_name1, interpolated_type_count)
+  
+} 
+```
+
+
+
+```{r}
+plot(interpolated_type_count_agx,
+     interpolated_type_count_ava,
+     interpolated_type_count_kum,
+     interpolated_type_count_rut,
+     interpolated_type_count_dar,
+     interpolated_type_count_tab,
+     interpolated_type_count_lak,
+     interpolated_type_count_lez,
+     interpolated_type_count_nog,
+     interpolated_type_count_tkr,
+     interpolated_type_count_arch,
+     interpolated_type_count_khv,
+     xlab = "number of wordforms", ylab = "number of unique wordforms", main = ""
+     
+
+     )
+
+```
+```{r}
+p <- ggplot(ttr_at_particular_corpus_size, aes(y=value, x = "corpus size = 4000 wordforms")) + 
+  geom_boxplot() +
+  geom_jitter(width = 0) +
+  labs(y = "TTRw") 
+p
+```
+
+
+
+```{r}
+colnames(ttr_at_particular_corpus_size)[1] <- "iso_lang"
+write.csv(ttr_at_particular_corpus_size,"ttr_at_particular_corpus_size_folk.csv", row.names = FALSE)
+ttr_at_particular_corpus_size -> ttr2
+```
+
+
+# Altitude (median)
+
+```{r}
+alt <- read.csv("villages_Lesha_K.csv",
+                header = TRUE, sep = "\t")
+alt %>%
+  select("lang", "gltc_lang", "elevation", "aff") -> alt2
+alt2
+```
+
+
+```{r}
+alt2 %>%
+  filter(alt2$elevation != "NA") %>%
+  group_by(gltc_lang) %>%
+  summarise(alt_median = median (elevation), n_villages = n()) -> altitude_medians
+altitude_medians %>%
+  mutate(iso_lang = iso.gltc(gltc_lang)) -> altitude_medians2
+altitude_medians2
+```
+
+
+restore affiliation
+```{r}
+alt %>%
+  select ("aff", "gltc_lang") %>%
+  distinct()  -> aff_df
+merge (altitude_medians2, aff_df) -> altitude_medians2_with_aff
+altitude_medians2_with_aff
+```
+
+
+
+# Altitude (weighted mean)
+
+We calculate altitude as a weighted arithmetic mean taking into account how many speakers of the given language live in the villages located at different altitudes.
+
+
+```{r}
+census <- read.csv("altitude_dagestan.csv",
+                header = TRUE)
+
+census %>%
+  select("eng_vil_name", "lang_1_S", "census_2010", "elevation") -> census2
+
+census3 <- census2[complete.cases(census2), ] #remove rows if they have missing values
+census3
+```
+
+```{r}
+census3 %>%
+  group_by(lang_1_S) %>%
+  summarise(lang_population_size = sum (census_2010), spoken_in_villages = n()) -> lang_population_sizes
+census4 <- merge(census3, lang_population_sizes)
+census4 %>%
+  mutate(part_of_lang_population_size = census_2010/lang_population_size) -> census5
+census5
+```
+
+assign weighted mean elevation to each language
+
+
+```{r}
+census5 %>%
+  select (lang_1_S) %>%
+  unique() -> weighted_alt
+```
+
+```{r}
+for (language in unique(weighted_alt$lang_1_S)){
+  #print(language)
+  census5 %>%
+    filter(lang_1_S == language) -> census6
+  #villages_sample <- sample(census6$eng_vil_name, size = 10, replace = TRUE,
+  #       prob = census6$part_of_lang_population_size)
+  weighted_arithm_mean <- (sum(census6$elevation * census6$census_2010))/unique(census6$lang_population_size)
+  
+  #print(weighted_arithm_means)
+  weighted_alt$weighted_altitude[weighted_alt$lang_1_S == language] <- weighted_arithm_mean
+
+}
+weighted_alt
+```
+
+restore affiliation
+```{r}
+alt %>%
+  select ("aff", "lang") %>%
+  distinct()  -> aff_df
+colnames(weighted_alt)[1] <- "lang"
+merge (weighted_alt, aff_df) -> weighted_alt_with_aff
+weighted_alt_with_aff
+```
+
+
+
+
+# Merging two datasets and checking the correlation 
+
+
+```{r}
+ttr2["iso_lang"][ttr2["iso_lang"] == "arch"] <- "aqc"
+ttr2["iso_lang"][ttr2["iso_lang"] == "lak"] <- "lbe"
+ttr2["iso_lang"][ttr2["iso_lang"] == "and"] <- "ani"
+ttr2 %>%
+  mutate(lang = lang.iso(iso_lang)) -> ttr2
+ttr2
+```
+
+## TTR and median altitute
+
+
+```{r}
+merge(ttr2, altitude_medians2_with_aff) -> full_dat2
+full_dat2
+```
+
+
+boxplots (make no sense because there is only one observation per language), color = branch
+```{r}
+full_dat2  %>%
+  ggplot(aes(reorder(lang, value, FUN = median), value, color = aff))+
+  geom_boxplot(outlier.shape = NA)+
+  geom_jitter(width = 0.1)+
+  labs(x = "Languge",
+       y = "TTRw")+
+  theme_bw()+
+  theme(legend.position = "top")
+```
+
+scatter plot with a linear regression line
+
+```{r}
+full_dat2 %>% 
+  #distinct(elevation, value_median, .keep_all = TRUE) %>% 
+  distinct(alt_median, value, .keep_all = TRUE) %>% 
+  ggplot(aes(alt_median, value, label = lang))+
+  geom_smooth(method=lm, se=TRUE) +
+  geom_point()+
+  ggrepel::geom_text_repel(size = 4)+
+  labs(x = "median altitude (m)", y = "TTRw") 
+```
+correlation coefficient
+
+```{r}
+res <- cor.test(full_dat2$alt_median, full_dat2$value, 
+                    method = "pearson")
+
+res
+```
+
+```{r}
+res <- lm(alt_median ~ value + aff, full_dat2)
+summary(res)
+```
+
+## TTR and weighted mean altitude
+
+```{r}
+weighted_alt_with_aff["lang"][weighted_alt_with_aff["lang"] == "Dargwa"] <- "North-Central Dargwa"
+weighted_alt_with_aff["lang"][weighted_alt_with_aff["lang"] == "Xvarshi"] <- "Khwarshi-Inkhoqwari"
+
+```
+
+
+
+```{r}
+merge(ttr2, weighted_alt_with_aff) -> full_dat1
+full_dat1
+```
+
+
+```{r}
+full_dat1 %>% 
+  ggplot(aes(weighted_altitude, value, label = lang))+
+  geom_smooth(method=lm, se=TRUE) +
+  geom_point()+
+  ggrepel::geom_text_repel(size = 4)+
+  labs(x = "weighted altitude (m)", y = "TTRw") 
+```
+```{r}
+res <- cor.test(full_dat1$weighted_altitude, full_dat1$value, 
+                    method = "pearson")
+res
+```
+
+```{r}
+res <- lm(weighted_altitude ~ value + aff, full_dat1)
+summary(res)
+```
+
+
+# Distribution of correlation coefficients and p-values
+
+
+When we extract TTR values at the particular corpus size, we take only one datapoint per language. However, how exact is this datapoint?
+We check this by sampling the original (not interpolated) data and looking at the variance of obtained TTR values.
+For folklore texts we calculated correlation coefficients for 100 samples of sentences with the total number of wordforms approximately equal to 1000.
+
+the data in the file `TTR_100_datapoints_per_language_folk.txt` is produced by the python script `sampling_sentences_up_to_1000_tokens_folklore_texts`.
+
+```{r}
+ttr_samples <- read.csv("TTR_100_datapoints_per_language_folk.txt",
+                header = TRUE, sep = ",")
+ttr_samples <- tibble::rowid_to_column(ttr_samples, "sample")
+ttr_long <- gather(ttr_samples, key = "key", value, -"sample")
+ttr_long
+```
+```{r}
+ttr_long %>%
+  separate(key, c('iso_lang', 'genre')) %>%
+  select (-'genre') -> ttr3
+ttr3["iso_lang"][ttr3["iso_lang"] == "arch"] <- "aqc"
+ttr3["iso_lang"][ttr3["iso_lang"] == "lak"] <- "lbe"
+ttr3["iso_lang"][ttr3["iso_lang"] == "and"] <- "ani"
+ttr3 %>%
+  mutate(lang = lang.iso(iso_lang)) -> ttr3
+ttr3
+```
+
+```{r}
+merge(ttr3, weighted_alt_with_aff) -> full_dat3
+full_dat3
+```
+
+calculate correlation coefficients for each sample and save results in vector
+
+```{r}
+correlation_coefficients_folk <- c()
+for (sample_number in 1:100){ #the number of samples - change if needed
+  filter (full_dat3, sample == sample_number) -> full_dat4
+  res <- cor.test(full_dat4$weighted_altitude, full_dat4$value, 
+                    method = "pearson")
+  correlation_coefficients_folk <- append(correlation_coefficients_folk, as.numeric(res$estimate))
+}
+correlation_coefficients_folk
+```
+
+
+```{r}
+ggdensity(data.frame(correlation_coefficients_folk),
+          x = "correlation_coefficients_folk",
+          fill = "lightgray",
+          add = "mean",
+          rug = TRUE)
+```
+
+
+calculate p-values of correlation coefficients for each sample and save results in vector
+
+```{r}
+p.values <- c()
+for (sample_number in 1:100){ #the number of samples - change if needed
+  filter (full_dat3, sample == sample_number) -> full_dat4
+  res <- cor.test(full_dat4$weighted_altitude, full_dat4$value, 
+                    method = "pearson")
+  p.values <- append(p.values, as.numeric(res$p.value))
+}
+p.values
+```
+
+```{r}
+ggdensity(data.frame(p.values),
+          x = "p.values",
+          fill = "lightgray",
+          add = "mean",
+          rug = TRUE)
+```
+
+
+# Checking correlations in extrapolated data
+
+## Extrapolation of Heap's curves with zipfR
+
+
+```{r}
+languages = c('agx', 'ava', 'kum', 'rut', 'dar', 'tab', 'lak', 'lez','nog', 'tkr', 'arch', 'khv')
+
+#for checking correlations at different corpus sizes
+corpus_sizes <- sort(sample(1:45000, size = 100, replace = TRUE))
+
+```
+
+
+```{r}
+ttr_at_different_corpus_sizes <- data.frame(corpus_sizes)
+for (language in languages) {
+  freq_list <- read.tfl(paste0("frequency_lists_texts/", language, "-folk_freq.txt")) 
+  freq_spectrum <- tfl2spc(freq_list)
+  
+  
+  type_count <- read.vgc(paste0("type_counts_texts/", language, "-folk_type_counts.txt"))
+  var_name1 <- paste0("type_count_", language)
+  assign(var_name1, type_count)
+  
+  extrapolated_model <- lnre("fzm", freq_spectrum, exact=FALSE)
+  
+  
+  extrapolated_type_count <- lnre.vgc(extrapolated_model, (1:45000), variances=FALSE)
+  
+  #for checking correlations at different corpus sizes
+  ttr_for_one_language <- c()
+  for (x in 1:100){
+    n_of_types <- extrapolated_type_count$V[extrapolated_type_count$N == corpus_sizes[x]]
+    ttr_for_one_language <- append(ttr_for_one_language, n_of_types/corpus_sizes[x])
+    }
+  ttr_at_different_corpus_sizes[ , ncol(ttr_at_different_corpus_sizes) + 1] <- ttr_for_one_language      # Append new column
+  colnames(ttr_at_different_corpus_sizes)[ncol(ttr_at_different_corpus_sizes)] <- language
+  
+  
+  var_name2 <- paste0("extrapolated_type_count_", language)
+  assign(var_name2, extrapolated_type_count)
+} 
+write.csv(ttr_at_different_corpus_sizes,"ttr_at_different_corpus_sizes.csv", row.names = FALSE)
+```
+
+
+
+
+```{r}
+plot(type_count_agx,
+     type_count_ava,
+     type_count_kum,
+     type_count_rut,
+     type_count_dar,
+     type_count_tab,
+     type_count_lak,
+     type_count_lez,
+     type_count_nog,
+     type_count_tkr,
+ #    type_count_tat,
+     type_count_arch,
+     type_count_khv,
+     xlab = "number of wordforms", ylab = "number of unique wordforms", main = ""
+     
+     # legend=c("observed aghul",
+     #          "observed avar",
+     #          "observed kumyk",
+     #          "observed rutul",
+     #          "observed dargwa",
+     #          "observed tabasaran",
+     #          "observed lak",
+     #          "observed lezgian",
+     #          "observed nogai",
+     #          "observed tsakhur",
+     #          "observed tat",
+     #          "observed archi",
+     #          "observed khwarshi")
+     )
+
+```
+
+
+
+```{r}
+plot(extrapolated_type_count_agx,
+     extrapolated_type_count_ava,
+     extrapolated_type_count_kum,
+     extrapolated_type_count_rut,
+     extrapolated_type_count_dar,
+     extrapolated_type_count_tab,
+     extrapolated_type_count_lak,
+     extrapolated_type_count_lez,
+     extrapolated_type_count_nog,
+     extrapolated_type_count_tkr,
+    # extrapolated_type_count_tat,
+     extrapolated_type_count_arch,
+     extrapolated_type_count_khv,
+     xlab = "number of wordforms", ylab = "number of unique wordforms", main = ""
+
+
+     )
+
+```
+
+## Merging two datasets (extrapolated TTR and median altitude)
+
+```{r}
+ttr_at_different_corpus_sizes <- read.csv("ttr_at_different_corpus_sizes.csv",
+                header = TRUE)
+
+ttr_at_different_corpus_sizes <- tibble::rowid_to_column(ttr_at_different_corpus_sizes, "sample")
+ttr_at_different_corpus_sizes
+```
+```{r}
+ttr_at_different_corpus_sizes %>%
+  select (-"corpus_sizes") %>%
+  gather(key = "iso_lang", value, -"sample") -> ttr_at_different_corpus_sizes_long
+ttr_at_different_corpus_sizes_long["iso_lang"][ttr_at_different_corpus_sizes_long["iso_lang"] == "arch"] <- "aqc"
+ttr_at_different_corpus_sizes_long["iso_lang"][ttr_at_different_corpus_sizes_long["iso_lang"] == "lak"] <- "lbe"
+ttr_at_different_corpus_sizes_long["iso_lang"][ttr_at_different_corpus_sizes_long["iso_lang"] == "and"] <- "ani"
+ttr_at_different_corpus_sizes_long["iso_lang"][ttr_at_different_corpus_sizes_long["iso_lang"] == "tat"] <- "ttt"
+ttr_at_different_corpus_sizes_long
+```
+
+```{r}
+merge(ttr_at_different_corpus_sizes_long, altitude_medians2_with_aff) -> full_dat_folk
+full_dat_folk
+```
+
+```{r}
+full_dat_folk %>%
+  mutate(lang = lang.iso(iso_lang)) -> full_dat_folk2
+full_dat_folk2
+```
+
+## Checking correlations at different corpus sizes
+
+choose a sample (a particular corpus size) where you want to check the correlation
+it can be seen the results for differnt samples are completely different
+```{r}
+full_dat_folk2 %>%
+  filter(sample == "100") -> full_dat_folk3
+```
+
+
+
+```{r}
+#full_dat_folk2  %>%
+full_dat_folk3  %>%
+  ggplot(aes(reorder(lang, value, FUN = median), value, color = aff))+
+  geom_boxplot(outlier.shape = NA)+
+  geom_jitter(width = 0.1)+
+  labs(x = "Languge, folklore texts",
+       y = "TTRw at 100 random corpus sizes")+
+  theme_bw()+
+  theme(legend.position = "top")
+```
+
+```{r}
+full_dat_folk3 %>% 
+#full_dat_folk2 %>% 
+  ggplot(aes(alt_median, value, label = lang, col = lang))+
+  geom_smooth(method=lm) +
+  geom_point()+
+  labs(x = "elevation (m) (median)", y = "TTRw at 100 random corpus sizes") 
+```
+
+```{r}
+res <- cor.test(full_dat_folk3$alt_median, full_dat_folk3$value, 
+                    method = "pearson")
+
+res
+```

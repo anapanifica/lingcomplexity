@@ -1,0 +1,10 @@
+.DS_Store
+OLD_FILES/.DS_Store
+OLD_FILES/sampling/random_texts_cleaned/*.txt
+OLD_FILES/sampling/.DS_Store
+bible_texts/*
+folklore_texts/*
+random_texts/*
+kiko_data/kiko_data.csv
+villages_Lesha_K.csv
+altitude_dagestan.csv

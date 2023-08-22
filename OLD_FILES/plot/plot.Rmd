@@ -1,0 +1,115 @@
+---
+title: "Plot Morphology and Phonetics"
+output: html_notebook
+---
+
+```{r}
+library("tidyverse")
+```
+
+# Morphology 
+```{r}
+df1 <- read.csv("TTR_1000_datapoints_per_language.txt",
+                header = TRUE, sep = ",")
+df1
+```
+
+```{r}
+morph_means <- as.data.frame.list(colMeans(df1))
+morph_means_long_folk <- gather(morph_means)
+names(morph_means_long_folk)[2] <- "morph_complexity"
+morph_means_long_folk
+```
+
+# Phonetics
+
+```{r}
+df2 <- read.csv("phonetic_data.txt",
+                header = TRUE, sep = ",")
+df2
+```
+```{r}
+phon_means <- as.data.frame.list(colMeans(df2))
+phon_means_long <- gather(phon_means)
+names(phon_means_long)[2] <- "phon_complexity"
+phon_means_long
+```
+
+```{r}
+full_join(morph_means_long, phon_means_long) -> means
+means
+```
+
+# Families
+
+```{r}
+df3 <- read.csv("families.txt",
+                header = TRUE, sep = ",")
+df3_long <- gather(df3)
+names(df3_long)[2] <- "family"
+df3_long
+```
+
+```{r}
+full_join(means, df3_long) -> means2
+means2
+```
+
+
+
+# Plot morph+phon
+
+```{r}
+library("ggpubr")
+```
+
+```{r}
+ggscatter(means2, x = "morph_complexity", y = "phon_complexity",
+   label = "key", color = "family", show.legend.text = FALSE)
+```
+
+
+# EC+CC
+
+```{r}
+df4 <- read.csv("CC+EC.txt",
+                header = TRUE, sep = ",")
+df4
+```
+
+```{r}
+full_join(means2, df4) -> means3
+means3
+```
+
+# Plot TTR + CC.EC
+
+```{r}
+names(means3)[2] <- "TTR"
+names(means3)[6] <- "CC_EC"
+pl <- ggscatter(means3, x = "TTR", y = "CC_EC",
+   label = "key", color = "#f55e61", show.legend = FALSE)
+pl
+```
+
+
+
+
+```{r}
+df5 <- read.csv("language_comparison_100_datapoints_per_language_bibles.txt",
+                header = TRUE, sep = ",")
+df5
+```
+
+
+```{r}
+morph_means <- as.data.frame.list(colMeans(df5))
+morph_means_long_bibles <- gather(morph_means)
+names(morph_means_long_bibles)[2] <- "morph_complexity_bibles"
+morph_means_long_bibles
+```
+
+```{r}
+full_join(morph_means_long_bibles, morph_means_long_folk) -> means5
+means5
+```

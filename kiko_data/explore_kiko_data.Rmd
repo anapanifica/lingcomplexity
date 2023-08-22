@@ -1,0 +1,14 @@
+---
+title: "explore kiko dataset"
+output: html_notebook
+---
+
+```{r}
+library("tidyverse")
+```
+
+```{r}
+df <- read.csv("kiko_data.csv")
+df
+```
+
